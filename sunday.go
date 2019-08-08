@@ -1,13 +1,16 @@
 package main
 import (
+//  "bufio"
   "fmt"
   "strings"
   "bytes"
   "log"
   "net/http"
   //"time"
-//  "strconv"
+  "strconv"
   "io/ioutil"
+  "os"
+//  "encoding/csv"
   "encoding/json"
 )
 var rpcnode = "http://127.0.0.1:8332"
@@ -29,7 +32,7 @@ type txData struct {
 	inputAcc int
 	outputAcc int
 	txid string
-	value float64
+	value uint64
 }
 func dorpc (method string, params []interface{}) (map[string]interface{}) {
   requestJson, _ := json.Marshal(&Call{Jsonrpc:"1.0", Id : "0", Method: method, Params: params})
@@ -51,7 +54,7 @@ func rpcgetblockhash (block int) (string) {
   result, _ := response["result"].(string)
   return result
 }
-func rpcgetUTXOs(blockheight int, utxoAccDictptr *map[string] *int, txidOutAccptr *map[string] *int, txidInAccptr *map[string] **int, txidValueptr*map[string] float64){
+func rpcgetUTXOs(blockheight int, utxoAccDictptr *map[string] *int, txidOutAccptr *map[string] *int, txidInAccptr *map[string] **int, txidValueptr*map[string] uint64){
 	if (blockheight%2000 == 0) {
 			log.Println(blockheight)
 	}
@@ -59,7 +62,7 @@ func rpcgetUTXOs(blockheight int, utxoAccDictptr *map[string] *int, txidOutAccpt
 	tx, ok := (block["tx"]).([]interface{})
 	if !ok { log.Println("error")}
 //	var output_add []string
-	dictSize := len(*utxoAccDictptr)
+	dictSize := len(*utxoAccDictptr)+1
 	for txNum, transaction := range tx {
 			transactionT, _ := transaction.(map[string]interface{})
 			txidT, _ := transactionT["txid"].(string)
@@ -82,13 +85,13 @@ func updateOuts(txid string, txOutputs []string, utxoAccDictptr *map[string] *in
 		//	log.Println(utxo)
 		}else{
 			(*utxoAccDictptr)[utxo]= currOutAccptr
-		}	
+		}
 	}
 	(*txidOutAccptr)[txid] = currOutAccptr
 //	log.Println(*utxoAccDictptr)
 }
 func updateIns (txid string, vinTxids []string, txidOutDictptr *map [string] *int, txidInDictptr *map[string] **int){
-	currInAcc := -1
+	currInAcc := 0
 	var currInAccptr **int
 	currInAccP1 := &currInAcc
 	currInAccptr = &currInAccP1
@@ -101,7 +104,7 @@ func updateIns (txid string, vinTxids []string, txidOutDictptr *map [string] *in
 	(*txidInDictptr)[txid] = currInAccptr
 }
 
-func getOutputs (txid string, transaction map[string]interface{}, txidValueptr *map[string] float64) ([]string) {
+func getOutputs (txid string, transaction map[string]interface{}, txidValueptr *map[string] uint64) ([]string) {
   value := 0.0
   vout, _ := transaction["vout"].([]interface{})
   var output_add []string
@@ -115,7 +118,7 @@ func getOutputs (txid string, transaction map[string]interface{}, txidValueptr *
     output_add = append(output_add, in)
   }
 // log.Println(value)
-  (*txidValueptr)[txid] = value
+  (*txidValueptr)[txid] = valueFormatter(value)
   return output_add
 }
 
@@ -141,22 +144,70 @@ func formatString(address interface{})(string){
 	return trimPre
 }
 
+//func writeMatrixMarketFile(data []string) {
+//    file, err := os.Create("result.txt")
+//    checkError("Cannot create file", err)
+//    defer file.Close()
+//
+//    writer := bufio.NewWriter(file)
+//    defer writer.Flush()
+
+//    for _, value := range data {
+  //      err := writer.Write(value)
+    //    checkError("Cannot write to file", err)
+   // }
+//}
+
+
+
+func makeMMString(inAcc int, outAcc int, val uint64)(string){
+	mmStr := strconv.Itoa(inAcc) + " " + strconv.Itoa(outAcc)+ " " + strconv.FormatUint(val, 10)
+	return mmStr
+}
+func valueFormatter (floatVal float64)(uint64){
+	s := fmt.Sprintf("%.8f", floatVal)
+	f, _ := strconv.ParseFloat(s, 64)
+	var i uint64 = uint64(f)*100000000
+	return i
+}
+
 func main(){
 
 	utxoAccDict := map[string] *int{}
 	txidOutDict := map[string] *int{}
 	txidInDict := map[string] **int{}
-	txidValue := map[string] float64{}
+	txidValue := map[string] uint64{}
 //      var data []interface{}
-	for i := 0; i<12; i++{
+	for i := 0; i<123; i++{
 		rpcgetUTXOs(i, &utxoAccDict, &txidOutDict, &txidInDict, &txidValue)
 //		log.Println(utxoAccDict)
 	}
-	var data []txData
-	for txid, outptr := range txidOutDict{
-		item := txData {**(txidInDict[txid]), *outptr, txid, txidValue[txid]}
-		data = append (data, item)
+	f, err := os.Create("output")
+	if err != nil {
+		fmt.Println(err)
+                f.Close()
+        return
 	}
+
+	//var data []txData
+	//var strData []string
+	dataSize := len (txidOutDict)
+	headerStr := makeMMString(dataSize, dataSize, uint64(dataSize*dataSize))
+	fmt.Fprintln(f, headerStr)
+	for txid, outptr := range txidOutDict{
+//		item := txData {**(txidInDict[txid]), *outptr, txid, txidValue[txid]}
+		strItem := makeMMString(**(txidInDict[txid]), *outptr, txidValue[txid])
+		//strData = append (strData, strItem)
+		fmt.Fprintln(f, strItem)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+	//	data = append (data, item)
+	}
+	f.Close()
 	//log.Println(txidInDict)
-	log.Println(data)
+	//log.Println(data)
+	//writeMatrixMarketFile(strData)
 }
