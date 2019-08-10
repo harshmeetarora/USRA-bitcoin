@@ -167,9 +167,11 @@ func makeMMString(inAcc int, outAcc int, val uint64)(string){
 func valueFormatter (floatVal float64)(uint64){
 	s := fmt.Sprintf("%.8f", floatVal)
 	f, _ := strconv.ParseFloat(s, 64)
-	var i uint64 = uint64(f)*100000000
+	var i uint64 = uint64(f*100000000.0)
 	return i
 }
+//func strToSatoshi (strVal string)(uint64){}
+
 
 func main(){
 
@@ -178,7 +180,7 @@ func main(){
 	txidInDict := map[string] **int{}
 	txidValue := map[string] uint64{}
 //      var data []interface{}
-	for i := 0; i<123; i++{
+	for i := 0; i<123456; i++{
 		rpcgetUTXOs(i, &utxoAccDict, &txidOutDict, &txidInDict, &txidValue)
 //		log.Println(utxoAccDict)
 	}
@@ -188,25 +190,39 @@ func main(){
                 f.Close()
         return
 	}
+        metaF, err := os.Create("metadata")
+        if err != nil {
+                fmt.Println(err)
+                metaF.Close()
+        return
+        }
+
 
 	//var data []txData
 	//var strData []string
-	dataSize := len (txidOutDict)
-	headerStr := makeMMString(dataSize, dataSize, uint64(dataSize*dataSize))
-	fmt.Fprintln(f, headerStr)
+//	dataSize := len (txidOutDict)
+//	headerStr := makeMMString(dataSize, dataSize, uint64(dataSize*dataSize))
+//	fmt.Fprintln(f, headerStr)
 	for txid, outptr := range txidOutDict{
 //		item := txData {**(txidInDict[txid]), *outptr, txid, txidValue[txid]}
 		strItem := makeMMString(**(txidInDict[txid]), *outptr, txidValue[txid])
 		//strData = append (strData, strItem)
+		metaStr := strItem + " " + txid
 		fmt.Fprintln(f, strItem)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+                fmt.Fprintln(metaF, metaStr)
+                if err != nil {
+                        fmt.Println(err)
+                        return
+                }
 
 	//	data = append (data, item)
 	}
 	f.Close()
+	metaF.Close()
 	//log.Println(txidInDict)
 	//log.Println(data)
 	//writeMatrixMarketFile(strData)
