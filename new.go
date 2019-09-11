@@ -58,16 +58,13 @@ func rpcgetUTXOs(blockheight int, utxoAccDictptr *map[string] *int, txidOutAccpt
 	tx, ok := (block["tx"]).([]interface{})
 	if !ok { log.Println("tx Error")}
 	dataSize := len(*txidOutAccptr)
-	//log.Println("datasize : ", dataSize)
 	for txNum, transaction := range tx {
 		transactionT, _ := transaction.(map[string]interface{})
 		txidT, _ := transactionT["txid"].(string)
 		txid := fmt.Sprintf("%v", txidT)
 		currOutAcc := txNum+dataSize+2
 		currOutAccptr := &currOutAcc
-//		log.Println(*currOutAccptr)
 		output_add := getOutputs(txid, transactionT, txidValueptr)
-//		log.Println(output_add)
 		vinTxids := getIntputsTxids(transactionT)
 		updateOuts(txid, output_add, utxoAccDictptr,txidOutAccptr, currOutAccptr)
 		mergeVins(txid, vinTxids, vinAccDictptr, currOutAccptr)
@@ -129,7 +126,7 @@ func getIntputsTxids (transaction map[string]interface{}) ([]string) {
 *updates mapping utxo to out account pointers
 *maps txid to output account pointer
 *@params: 
-*       txid: current txid
+* txid: current txid
 * txOutputs : array of all utxos for current txid
 * utxoAccDictptr : pointer to mapping of utxo to output acc
 * txidOutAccptr : pointer to mapping of txid to output acc
@@ -144,12 +141,17 @@ func updateOuts(txid string, txOutputs []string, utxoAccDictptr *map[string] *in
 	}
 	(*txidOutAccptr)[txid] = currOutAccptr
 }
+/*
+*megres input accounts based on vins
+*@params:
+* txid: current txid
+* vinAccDictptr: mapping of vin txid to output accounts
+* currOutAccptr: current output account pointer
+*/
 func mergeVins(txid string, txInputs []string, vinAccDictptr *map[string] *int, currOutAccptr *int){
 
 	for _, vin := range txInputs {
 		if(vin != "coinbase"){
-			//merge vin accounts
-			log.Println("BLAAAHHH")
 			if val, ok := (*vinAccDictptr)[vin]; ok {
 					*val = *currOutAccptr
 			}else{
@@ -162,7 +164,7 @@ func mergeVins(txid string, txInputs []string, vinAccDictptr *map[string] *int, 
 *updates mapping utxo to out account pointers
 *maps txid to output account pointer
 *@params: 
-*       txid: current txid
+* txid: current txid
 * txOutputs : array of all utxos for current txid
 * utxoAccDictptr : pointer to mapping of utxo to output acc
 * txidOutAccptr : pointer to mapping of txid to output acc
@@ -201,7 +203,7 @@ func formatString(address interface{})(string){
 *@returns: output string "in out value" (string)
 */
 func makeMMString(inAcc int, outAcc int, val uint64)(string){
-	mmStr := strconv.Itoa(inAcc) + " " + strconv.Itoa(outAcc)+ " " + strconv.FormatUint(val, 10)
+	mmStr := strconv.Itoa(inAcc) + " " + strconv.Itoa(outAcc) + " " + strconv.FormatUint(val, 10)
 	return mmStr
 }
 
@@ -217,19 +219,32 @@ func valueFormatter (floatVal float64)(uint64){
 	return i
 }
 
+func orderAccounts(txidOutDictptr *map [string] *int, orderedAccptr *map[int] int){
+	(*orderedAccptr)[1] = 0	//initialize coinbase
+	i:=1
+	for _, accptr := range *txidOutDictptr{
+		if _, ok := (*orderedAccptr)[*accptr]; !ok {
+			(*orderedAccptr)[*accptr] = i
+			i++
+		}
+
+	}
+	log.Println("total ", i)
+}
+
 func main(){
 	utxoAccDict := map[string] *int{}
 	txidOutDict := map[string] *int{}
 	txidInDict := map[string] **int{}
 	txidValue := map[string] uint64{}
 	vinAccDict := map[string] *int{}
-	log.Println("START")
+	orderedAccDict := map[int] int{}
 
-	for i := 0; i<1234; i++{
+	for i := 0; i<150000; i++{
         rpcgetUTXOs(i, &utxoAccDict, &txidOutDict, &txidInDict, &txidValue, &vinAccDict)
 	}
 	//output file
-	f, err := os.Create("output")
+	f, err := os.Create("outEdge")
 	if err != nil {
 			fmt.Println(err)
 			f.Close()
@@ -242,9 +257,13 @@ func main(){
 			metaF.Close()
 	return
 	}
-        log.Println("PRINTING")
+
+	orderAccounts(&txidOutDict, &orderedAccDict)
+	log.Println(len(txidOutDict))
 	for txid, outptr:= range txidOutDict{
-		strItem := makeMMString(**(txidInDict[txid]), *outptr, txidValue[txid])
+		inAcc := orderedAccDict[**(txidInDict[txid])]
+		outAcc := orderedAccDict[*outptr]
+		strItem := makeMMString(inAcc, outAcc, txidValue[txid])
 		metaStr := strItem + " " + txid
 		fmt.Fprintln(f, strItem)
 		if err != nil {
